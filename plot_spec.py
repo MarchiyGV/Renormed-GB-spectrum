@@ -128,55 +128,64 @@ for i in range(1, len(Er)):
         while i+k<len(E_s) and E_s[i+k] < E_s[i+k-1]:
             k+=1
         E2 = (E_s[i+k-1] + E_s[i+k-2])/2
-        n = 2
-        cluster = [ids_c[i+k-1], ids_c[i+k-2]]
+        clusters = -np.ones((k, k+1)) # empty elements is -1 because ids_n_s does not include it
+        clusters[-1, 0:2] = [ids_c[i+k-1], ids_c[i+k-2]]
+        #cluster = [ids_c[i+k-1], ids_c[i+k-2]]
         Erow = np.zeros(k)
         Erow[-1] = E2
-        Frow = np.ones_like(Erow)
+        Frow = np.ones_like(Erow).astype(int)
         Frow[-1] = 2
         #print(Erow)
         for j in range(k-1):
             ind = i+k-2-j
-            mask = np.isin(ids_n_s[ind], cluster) # is neighbour of [i+k-2-j] the member of cluster?
+            cluster = clusters[k-1-j]
+            mask = np.isin(ids_n_s[ind], cluster) # is neighbour of [i+k-2-j] the member of cluster [k-1-j]?
             O = np.sum(w_s[ind]*mask) # bonds with current site
-            if E2 - O/n < E_s[ind] + O: # case when solutes does not form a cluster
-            """
-            !!!!!!!!!!!
-            что делать с несколькими кластерами в серии???????????????
-            !!!!!!!!!!
-            """
-                Erow[k-2-j] = E_s[ind] + O
-                Erow[k-3-j] = E2 - O/n
+            if E2 - O/Frow[k-1-j] < E_s[ind] + O: # case when solutes does not form a cluster
+                Erow[k-1-j] = E_s[ind] + O
+                Erow[k-2-j] = E2 - O/Frow[k-1-j]
+                t = Frow[k-1-j]
+                Frow[k-1-j] = Frow[k-2-j]
+                Frow[k-2-j] = t
+                t = clusters[k-1-j]
+                clusters[k-1-j] = clusters[k-2-j]
+                clusters[k-2-j] = t
             else: # solutes form a cluster
-                E2 = (E2*n + E_s[ind])/(n+1)
-                n += 1
-                holes = n-2 # number of removed [individual] sites -1 (because array has lenght shorter by 1) 
+                E2 = (E2*Frow[k-1-j] + E_s[ind])/(Frow[k-1-j]+1) 
                 Erow[k-2-j] = E2
-                Frow[k-2-j] = n
-                for ii in range(k-1-j, k-holes): # shift
+                Frow[k-2-j] = Frow[k-1-j]+1
+                clusters[k-2-j] = clusters[k-1-j]
+                for ii in range(k-1-j, k-1): # shift
                     Erow[ii] = Erow[ii+1] # shift
                     Frow[ii] = Frow[ii+1] # shift
+                    clusters[ii] = clusters[ii+1] # shift
                 Erow[-1] = 0 # shift
                 Frow[-1] = 0 # shift
-                cluster.append(ids_c[ind])
+                clusters[-1] = -np.ones(k+1)
+                #cluster.append(ids_c[ind])
+                clusters[k-2-j, Frow[k-2-j]-1] = ids_c[ind]
         
-        print(f'{k} {n} {Frow}')
-        
-        E_s[i-1:i+k-1] = Erow # write calculated series to E_s
-        # shift
-        F_s[i-1:i+k-1] = Frow # write nuber of clusters
+        print(f'{k} {Frow}')
+        zeros = np.sum(Frow==0)
+        nonzeros = k - zeros
+        if zeros>0:
+            E_s[i-1:i+nonzeros-1] = Erow[:nonzeros] # write calculated series to E_s
+            E_s[i+nonzeros-1:-zeros] = E_s[i+k-1:]# shift
+            E_s[-zeros] = 0
+            F_s[i-1:i+nonzeros-1] = Frow[:nonzeros] # write calculated series to E_s
+            F_s[i+nonzeros-1:-zeros] = F_s[i+k-1:]# shift
+            F_s[-zeros] = 0
+        else:
+            E_s[i-1:i+k-1] = Erow
+            F_s[i-1:i+k-1] = Frow
 
 #plt.hist(Er, bins=50, density=True, label='interaction')
-plt.hist(E_s, bins=50, density=True, alpha=0.4, label='interaction s')
+plt.hist(E_s[F_s!=0], bins=50, density=True, alpha=0.4, label='interaction s')
 #plt.hist(y, bins=40, alpha=0.4, density=True, label='dilute')
 plt.xlabel('$E_{seg}$')
 plt.ylabel('probability')
 plt.legend()
 plt.show()
-
-
-
-
 
 
 
