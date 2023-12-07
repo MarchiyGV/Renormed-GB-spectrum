@@ -115,9 +115,16 @@ for i in range(1, len(Er)):
     ids_n_selected[i0], ids_n_selected[i] = ids_n_selected[i], ids_n_selected[i0]
     
 #%%
+
+plot_each = 100
+
 E_s = dc(Er)
 F_s = np.ones(Er.shape, dtype=int)
-#w_s = dc(wselected) 
+w_n = dc(wselected) 
+for i in range(len(w_n)):
+    for j in range(len(w_n[i])):
+        if w_n[i][j] > 0:
+            w_n[i][j] = 0
 
 ids_c_s = -np.ones((len(Er), len(Er)), dtype=int)
 ids_c_s[:, 0] = ids_c_selected
@@ -143,7 +150,7 @@ while change_flag:
             for ind in lst:
                 pind = np.where(ids_c_selected==ind)
                 mask = np.isin(ids_n_selected[pind], ids_c_s[i]) # is neighbours of [i-1] the member of cluster [i]?
-                O += np.sum(wselected[pind]*mask) # bonds with current site
+                O += np.sum(w_n[pind]*mask) # bonds with current site
                 
             E2 = (E_s[i-1]*F_s[i-1] + E_s[i]*F_s[i])/(F_s[i-1]+F_s[i])
             
@@ -151,8 +158,9 @@ while change_flag:
                 # replace it with corresponding changes in bonds energy
                 
                 # E_s
+                t = E_s[i]
                 E_s[i] = E_s[i-1] + O
-                E_s[i-1] = E2 - O/F_s[i]
+                E_s[i-1] = t - O/F_s[i]
                 
                 # F_s
                 t = F_s[i]
@@ -173,7 +181,8 @@ while change_flag:
                 F_s[i-1] += F_s[i] # F_s
                 
                 # ids_c_s
-                ids3 = np.concatenate((ids_c_s[i-1], ids_c_s[i]))
+                #ids3 = np.concatenate((ids_c_s[i-1], ids_c_s[i]))
+                ids3 = np.array(list(set(ids_c_s[i-1]).union(ids_c_s[i])))
                 ids3 = ids3[ids3!=-1]
                 ids_c_s[i-1, :len(ids3)] = ids3 
                 
@@ -194,13 +203,19 @@ while change_flag:
             i0 = len(Er)-i
             break
      
-    plt.plot(E_s)
-    plt.savefig(f'plots/plot_{iteration}.png')
-    plt.show()
+    if iteration % plot_each == 0:
+        plt.plot(E_s)
+        plt.savefig(f'plots/plot_{iteration}.png')
+        plt.show()
     
-#plt.hist(Er, bins=50, density=True, label='interaction')
-plt.hist(E_s[F_s!=0], bins=50, density=True, alpha=0.4, label='interaction s')
-#plt.hist(y, bins=40, alpha=0.4, density=True, label='dilute')
+#%%
+from itertools import chain, repeat
+
+Ehist = list(chain.from_iterable(repeat(j, times = i) for i, j in zip(F_s, E_s)))
+
+#plt.hist(Er, bins=40, density=True, label='interaction')
+plt.hist(Ehist, bins=30, density=True, alpha=1, label='interaction s')
+plt.hist(y, bins=50, alpha=0.4, density=True, label='dilute')
 plt.xlabel('$E_{seg}$')
 plt.ylabel('probability')
 plt.legend()
