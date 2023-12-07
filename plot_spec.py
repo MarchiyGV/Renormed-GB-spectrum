@@ -117,68 +117,87 @@ for i in range(1, len(Er)):
 #%%
 E_s = dc(Er)
 F_s = np.ones(Er.shape, dtype=int)
+#w_s = dc(wselected) 
+
+ids_c_s = -np.ones((len(Er), len(Er)), dtype=int)
+ids_c_s[:, 0] = ids_c_selected
+
 cnt = 0
-ids_c_s = dc(ids_c_selected)
-ids_n_s = dc(ids_n_selected)
-w_s = dc(wselected) 
 
-for i in range(1, len(Er)):
-    if E_s[i] < E_s[i-1]:
-        k = 1 # lenght of anomaleus sequense: E_(i+k-1) < E_(i+k-1) < ... < E_(i-1) [k elements]
-        while i+k<len(E_s) and E_s[i+k] < E_s[i+k-1]:
-            k+=1
-        E2 = (E_s[i+k-1] + E_s[i+k-2])/2
-        clusters = -np.ones((k, k+1)) # empty elements is -1 because ids_n_s does not include it
-        clusters[-1, 0:2] = [ids_c[i+k-1], ids_c[i+k-2]]
-        #cluster = [ids_c[i+k-1], ids_c[i+k-2]]
-        Erow = np.zeros(k)
-        Erow[-1] = E2
-        Frow = np.ones_like(Erow).astype(int)
-        Frow[-1] = 2
-        #print(Erow)
-        for j in range(k-1):
-            ind = i+k-2-j
-            cluster = clusters[k-1-j]
-            mask = np.isin(ids_n_s[ind], cluster) # is neighbour of [i+k-2-j] the member of cluster [k-1-j]?
-            O = np.sum(w_s[ind]*mask) # bonds with current site
-            if E2 - O/Frow[k-1-j] < E_s[ind] + O: # case when solutes does not form a cluster
-                Erow[k-1-j] = E_s[ind] + O
-                Erow[k-2-j] = E2 - O/Frow[k-1-j]
-                t = Frow[k-1-j]
-                Frow[k-1-j] = Frow[k-2-j]
-                Frow[k-2-j] = t
-                t = clusters[k-1-j]
-                clusters[k-1-j] = clusters[k-2-j]
-                clusters[k-2-j] = t
+#ids_n_s = dc(ids_n_selected)
+
+change_flag = True
+iteration = 0
+i0 = len(Er)
+while change_flag:
+    print(f'iter {iteration}, last step on {i0}/{len(Er)}')
+    iteration += 1
+    change_flag = False
+    for i in range(len(Er)-1-cnt, 1, -1): # reverse order
+        if E_s[i] < E_s[i-1]:
+            change_flag = True
+            
+            O = 0
+            lst = ids_c_s[i-1]
+            lst = lst[lst!=-1]
+            for ind in lst:
+                pind = np.where(ids_c_selected==ind)
+                mask = np.isin(ids_n_selected[pind], ids_c_s[i]) # is neighbours of [i-1] the member of cluster [i]?
+                O += np.sum(wselected[pind]*mask) # bonds with current site
+                
+            E2 = (E_s[i-1]*F_s[i-1] + E_s[i]*F_s[i])/(F_s[i-1]+F_s[i])
+            
+            if E2 - O/F_s[i] < E_s[i-1] + O: # case when solutes does not form a cluster
+                # replace it with corresponding changes in bonds energy
+                
+                # E_s
+                E_s[i] = E_s[i-1] + O
+                E_s[i-1] = E2 - O/F_s[i]
+                
+                # F_s
+                t = F_s[i]
+                F_s[i] = F_s[i-1]
+                F_s[i-1] = t
+                
+                # ids_c_s
+                t = ids_c_s[i]
+                ids_c_s[i] = ids_c_s[i-1]
+                ids_c_s[i-1] = t
+                
             else: # solutes form a cluster
-                E2 = (E2*Frow[k-1-j] + E_s[ind])/(Frow[k-1-j]+1) 
-                Erow[k-2-j] = E2
-                Frow[k-2-j] = Frow[k-1-j]+1
-                clusters[k-2-j] = clusters[k-1-j]
-                for ii in range(k-1-j, k-1): # shift
-                    Erow[ii] = Erow[ii+1] # shift
-                    Frow[ii] = Frow[ii+1] # shift
-                    clusters[ii] = clusters[ii+1] # shift
-                Erow[-1] = 0 # shift
-                Frow[-1] = 0 # shift
-                clusters[-1] = -np.ones(k+1)
-                #cluster.append(ids_c[ind])
-                clusters[k-2-j, Frow[k-2-j]-1] = ids_c[ind]
-        
-        print(f'{k} {Frow}')
-        zeros = np.sum(Frow==0)
-        nonzeros = k - zeros
-        if zeros>0:
-            E_s[i-1:i+nonzeros-1] = Erow[:nonzeros] # write calculated series to E_s
-            E_s[i+nonzeros-1:-zeros] = E_s[i+k-1:]# shift
-            E_s[-zeros] = 0
-            F_s[i-1:i+nonzeros-1] = Frow[:nonzeros] # write calculated series to E_s
-            F_s[i+nonzeros-1:-zeros] = F_s[i+k-1:]# shift
-            F_s[-zeros] = 0
-        else:
-            E_s[i-1:i+k-1] = Erow
-            F_s[i-1:i+k-1] = Frow
-
+                cnt += 1
+                # combine elements into one and shift right side of array
+                
+                # Combine
+                E_s[i-1] = E2 # E_s
+                F_s[i-1] += F_s[i] # F_s
+                
+                # ids_c_s
+                ids3 = np.concatenate((ids_c_s[i-1], ids_c_s[i]))
+                ids3 = ids3[ids3!=-1]
+                ids_c_s[i-1, :len(ids3)] = ids3 
+                
+                # Shift
+                
+                # E_s
+                E_s[i:] = np.roll(E_s[i:], -1)
+                E_s[-1] = 0
+                
+                # F_s
+                F_s[i:] = np.roll(F_s[i:], -1)
+                F_s[-1] = 0
+                
+                # ids_c_s
+                ids_c_s[i:] = np.roll(ids_c_s[i:], -1, axis=0)
+                ids_c_s[-1] = -np.ones(len(Er))
+        elif change_flag:
+            i0 = len(Er)-i
+            break
+     
+    plt.plot(E_s)
+    plt.savefig(f'plots/plot_{iteration}.png')
+    plt.show()
+    
 #plt.hist(Er, bins=50, density=True, label='interaction')
 plt.hist(E_s[F_s!=0], bins=50, density=True, alpha=0.4, label='interaction s')
 #plt.hist(y, bins=40, alpha=0.4, density=True, label='dilute')
@@ -186,7 +205,6 @@ plt.xlabel('$E_{seg}$')
 plt.ylabel('probability')
 plt.legend()
 plt.show()
-#Dev
 
 
 
