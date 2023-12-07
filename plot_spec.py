@@ -186,7 +186,7 @@ plt.xlabel('$E_{seg}$')
 plt.ylabel('probability')
 plt.legend()
 plt.show()
-
+#Main
 
 
 
